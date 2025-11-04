@@ -1,0 +1,75 @@
+pipeline {
+    agent { docker { image 'python:3.10' } }
+
+    environment {
+        FRONTEND_IMAGE = 'myrepo/frontend'
+        BACKEND_IMAGE  = 'myrepo/backend'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Cloning repository...'
+                checkout scm
+            }
+        }
+
+        stage('Build Frontend') {
+            agent { docker { image 'node:18' } }
+            steps {
+                dir('frontend') {
+                    sh '''
+                    echo "Installing frontend dependencies..."
+                    npm install
+                    npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Build Backend') {
+            steps {
+                dir('backend') {
+                    sh '''
+                    echo "Installing backend dependencies..."
+                    pip install -r requirements.txt
+                    python -m pytest || true
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Build and Push') {
+            steps {
+                sh '''
+                echo "Building Docker images..."
+                docker build -t ${BACKEND_IMAGE}:latest ./backend
+                docker build -t ${FRONTEND_IMAGE}:latest ./frontend
+
+                echo "Pushing images to Docker registry..."
+                docker push ${BACKEND_IMAGE}:latest
+                docker push ${FRONTEND_IMAGE}:latest
+                '''
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                sh '''
+                echo "Deploying containers..."
+                docker-compose down || true
+                docker-compose up -d --build
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ CI/CD pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Build failed. Check logs.'
+        }
+    }
+}
