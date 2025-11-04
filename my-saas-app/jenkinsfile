@@ -1,75 +1,42 @@
 pipeline {
-    agent { docker { image 'python:3.10' } }
-
-    environment {
-        FRONTEND_IMAGE = 'myrepo/frontend'
-        BACKEND_IMAGE  = 'myrepo/backend'
-    }
+    agent any
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Cloning repository...'
+                echo 'Pulling code from GitHub...'
                 checkout scm
             }
         }
 
-        stage('Build Frontend') {
-            agent { docker { image 'node:18' } }
+        stage('Build Backend Docker Image') {
             steps {
-                dir('frontend') {
+                dir('my-saas-app/backend') {
                     sh '''
-                    echo "Installing frontend dependencies..."
-                    npm install
-                    npm run build
+                        echo "Building backend Docker image..."
+                        docker build -t my-backend-app .
                     '''
                 }
             }
         }
 
-        stage('Build Backend') {
+        stage('Build Frontend Docker Image') {
             steps {
-                dir('backend') {
+                dir('my-saas-app/frontend') {
                     sh '''
-                    echo "Installing backend dependencies..."
-                    pip install -r requirements.txt
-                    python -m pytest || true
+                        echo "Building frontend Docker image..."
+                        docker build -t my-frontend-app .
                     '''
                 }
             }
         }
 
-        stage('Docker Build and Push') {
+        stage('Post-Build Cleanup') {
             steps {
-                sh '''
-                echo "Building Docker images..."
-                docker build -t ${BACKEND_IMAGE}:latest ./backend
-                docker build -t ${FRONTEND_IMAGE}:latest ./frontend
-
-                echo "Pushing images to Docker registry..."
-                docker push ${BACKEND_IMAGE}:latest
-                docker push ${FRONTEND_IMAGE}:latest
-                '''
+                echo 'Build complete. Listing images...'
+                sh 'docker images | grep my-'
             }
-        }
-
-        stage('Deploy with Docker Compose') {
-            steps {
-                sh '''
-                echo "Deploying containers..."
-                docker-compose down || true
-                docker-compose up -d --build
-                '''
-            }
-        }
-    }
-
-    post {
-        success {
-            echo '✅ CI/CD pipeline completed successfully!'
-        }
-        failure {
-            echo '❌ Build failed. Check logs.'
         }
     }
 }
+
